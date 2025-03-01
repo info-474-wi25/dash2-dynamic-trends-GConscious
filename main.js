@@ -5,9 +5,7 @@ const margin = { top: 50, right: 30, bottom: 60, left: 70 };
 const width = 900 - margin.left - margin.right;
 const height = 400 - margin.top - margin.bottom;
 
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("DOM fully loaded and parsed");
-    
+
     // Create SVG containers for both charts
     const svg1 = d3.select("#lineChart1")
         .append("svg")
@@ -183,9 +181,4 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log("Chart rendering complete");
         
         
-    }).catch(function(error) {
-        // Handle errors in loading or processing the CSV
-        console.error("Error loading CSV:", error);
-        alert("Error loading data. Please check console for details.");
-    });
-});
+    })
