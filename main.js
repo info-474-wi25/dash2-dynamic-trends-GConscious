@@ -1,9 +1,47 @@
-// D3.js code for Soccer Player Salary Visualization
-
 // 1: SET GLOBAL VARIABLES
-const margin = { top: 50, right: 30, bottom: 60, left: 70 };
+const margin = { top: 50, right: 30, bottom: 60, left: 100 };
 const width = 900 - margin.left - margin.right;
 const height = 400 - margin.top - margin.bottom;
+
+
+const filterContainerDiv = document.createElement('div');
+filterContainerDiv.className = 'eu-filter-container';
+filterContainerDiv.style.marginBottom = '10px';
+filterContainerDiv.style.padding = '5px';
+filterContainerDiv.style.backgroundColor = '#f8f8f8';
+filterContainerDiv.style.border = '1px solid #ddd';
+filterContainerDiv.style.borderRadius = '3px';
+filterContainerDiv.style.display = 'flex';
+filterContainerDiv.style.justifyContent = 'flex-end';
+filterContainerDiv.style.width = '100%';
+
+const filterLabel = document.createElement('label');
+filterLabel.htmlFor = 'eu-filter';
+filterLabel.textContent = 'Filter by EU National status: ';
+filterLabel.style.marginRight = '10px';
+
+const filterSelect = document.createElement('select');
+filterSelect.id = 'eu-filter';
+filterSelect.style.padding = '5px';
+
+const options = [
+    { value: 'all', text: 'All Players' },
+    { value: 'Yes', text: 'EU National: Yes' },
+    { value: 'No', text: 'EU National: No' }
+];
+
+options.forEach(option => {
+    const optionElement = document.createElement('option');
+    optionElement.value = option.value;
+    optionElement.textContent = option.text;
+    filterSelect.appendChild(optionElement);
+});
+
+filterContainerDiv.appendChild(filterLabel);
+filterContainerDiv.appendChild(filterSelect);
+
+const secondChartContainer = document.querySelector('.chart-container:nth-child(4)');
+secondChartContainer.insertBefore(filterContainerDiv, document.getElementById('lineChart2'));
 
 // Create SVG containers for both charts
 const svg1 = d3.select("#lineChart1")
@@ -46,13 +84,12 @@ d3.csv("raw_wages.csv").then(function(data) {
             position: d.Position,
             age: +d.Age,
             lastClub: d["Last Club"],
+            euNational: d["EU National"] ? d["EU National"].trim() : d["EU National"],
             lastTransFee: d["Last Trans. Fee"],
-            // Convert transfer fee to numeric value for calculations
             lastTransFeeValue: d["Last Trans. Fee"] === "€0" ? 0 : 
                               d["Last Trans. Fee"].includes("M") ? 
                               parseFloat(d["Last Trans. Fee"].replace("€", "").replace("M", "")) * 1000000 : 
                               parseFloat(d["Last Trans. Fee"].replace("€", "")),
-            // Convert salary to numeric value
             salary: parseFloat(d.Salary.replace("€", "").replace(/,/g, ""))
         };
     });
@@ -144,87 +181,102 @@ d3.csv("raw_wages.csv").then(function(data) {
         .text("Salary in Euros");
     
     // ==========================================
-    //    CHART 2 - Salary vs Transfer Fee
+    //    CHART 2 - Salary vs Transfer Fee (MODIFIED TO SCATTER PLOT)
     // ==========================================
     
-    // Group data by Last Trans. Fee
-    const transFeesGrouped = d3.group(processedData, d => d.lastTransFee);
-    console.log("Grouped by transfer fee:", transFeesGrouped);
+    // Create a linear scale for X axis instead of band scale for scatter plot
+    const xScale2 = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.lastTransFeeValue) * 1.05])
+        .range([0, width]);
     
-    // Calculate average salary for each transfer fee
-    const avgSalaryByTransFee = Array.from(transFeesGrouped, ([key, values]) => {
-        const avg = d3.mean(values, d => d.salary);
-        return {
-            lastTransFee: key,
-            lastTransFeeValue: values[0].lastTransFeeValue,
-            avgSalary: avg,
-            count: values.length
-        };
-    });
-    
-    console.log("Average salary by transfer fee:", avgSalaryByTransFee);
-    
-    // Sort data by transfer fee
-    avgSalaryByTransFee.sort((a, b) => a.lastTransFeeValue - b.lastTransFeeValue);
-    
-    // X scale
-    const xScale = d3.scaleBand()
-        .domain(avgSalaryByTransFee.map(d => d.lastTransFee))
-        .range([0, width])
-        .padding(0.1);
-    
-    // Y scale
-    const yScale = d3.scaleLinear()
-        .domain([0, d3.max(avgSalaryByTransFee, d => d.avgSalary) * 1.1])
+    // Y scale for the scatter plot
+    const yScale2 = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => d.salary) * 1.05])
         .range([height, 0]);
     
-    // PLOT DATA FOR CHART 2
-    svg2.selectAll(".bar")
-        .data(avgSalaryByTransFee)
-        .enter()
-        .append("rect")
-        .attr("class", "bar")
-        .attr("x", d => xScale(d.lastTransFee))
-        .attr("y", d => yScale(d.avgSalary))
-        .attr("width", xScale.bandwidth())
-        .attr("height", d => height - yScale(d.avgSalary))
-        .attr("fill", "#4682B4")
-        .on("mouseover", function(event, d) {
-            d3.select(this).attr("fill", "#81A3C3");
-            tooltip.transition()
-                .duration(200)
-                .style("opacity", .9);
-            tooltip.html(`
-                <strong>Transfer Fee:</strong> ${d.lastTransFee}<br>
-                <strong>Average Salary:</strong> €${d3.format(",.2f")(d.avgSalary)}<br>
-                <strong>Number of Players:</strong> ${d.count}
-            `)
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 28) + "px");
-        })
-        .on("mouseout", function() {
-            d3.select(this).attr("fill", "#4682B4");
-            tooltip.transition()
-                .duration(500)
-                .style("opacity", 0);
-        });
+    // Function to update Chart 2 based on filter
+    function updateChart2(filterValue) {
+        // Filter data based on EU National status
+        const filteredData = filterValue === "all" 
+            ? processedData 
+            : processedData.filter(d => d.euNational === filterValue.trim());
+            
+        console.log("Filtered data count:", filteredData.length);
+        console.log("Filter value:", filterValue);
+        console.log("Sample filtered data:", filteredData.slice(0, 3));
+        
+        // Remove existing circles
+        svg2.selectAll("circle").remove();
+        
+        // Add circles with filtered data
+        svg2.selectAll("circle")
+            .data(filteredData)
+            .enter()
+            .append("circle")
+            .attr("cx", d => xScale2(d.lastTransFeeValue))
+            .attr("cy", d => yScale2(d.salary))
+            .attr("r", 5)
+            .attr("fill", "#4682B4")
+            .attr("opacity", 0.7)
+            .attr("stroke", "#333")
+            .attr("stroke-width", 0.5)
+            .on("mouseover", function(event, d) {
+                d3.select(this)
+                    .attr("r", 8)
+                    .attr("stroke-width", 2)
+                    .attr("fill", "#81A3C3");
+                    
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                    
+                tooltip.html(`
+                    <strong>Transfer Fee:</strong> ${d.lastTransFee}<br>
+                    <strong>Salary:</strong> €${d3.format(",.2f")(d.salary)}<br>
+                    <strong>Position:</strong> ${d.position}<br>
+                    <strong>EU National:</strong> ${d.euNational}<br>
+                    <strong>Last Club:</strong> ${d.lastClub}
+                `)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function() {
+                d3.select(this)
+                    .attr("r", 5)
+                    .attr("stroke-width", 0.5)
+                    .attr("fill", "#4682B4");
+                    
+                tooltip.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+    }
     
-    // ADD AXES FOR CHART 2
-    // X axis
+    // Initialize chart with all data
+    updateChart2("all");
+    
+    // Add event listener to dropdown
+    document.getElementById('eu-filter').addEventListener('change', function() {
+        console.log("Dropdown changed to:", this.value);
+        updateChart2(this.value);
+    });
+    
+    // Log the actual values in the dataset to check what values exist
+    const uniqueEUValues = [...new Set(processedData.map(d => d.euNational))];
+    console.log("Unique EU National values in dataset:", uniqueEUValues);
+    
+    // ADD AXES FOR CHART 2 WITH SPREAD OUT TICKS
+    // X axis with spread out ticks
     svg2.append("g")
         .attr("transform", `translate(0, ${height})`)
-        .call(d3.axisBottom(xScale)
-            .tickFormat(d => d)
-            .tickValues(xScale.domain().filter((d, i) => i % 3 === 0))
-        )
-        .selectAll("text")
-        .attr("transform", "rotate(-45)")
-        .style("text-anchor", "end")
-        .style("font-size", "10px");
+        .call(d3.axisBottom(xScale2)
+            .tickFormat(d => d >= 1000000 ? `€${d / 1000000}M` : `€${d}`)
+            .ticks(8) // Specify number of ticks to spread them out
+        );
     
     // Y axis
     svg2.append("g")
-        .call(d3.axisLeft(yScale)
+        .call(d3.axisLeft(yScale2)
             .tickFormat(d => `€${d3.format(",.0f")(d)}`));
     
     // ADD LABELS FOR CHART 2
@@ -232,9 +284,9 @@ d3.csv("raw_wages.csv").then(function(data) {
     svg2.append("text")
         .attr("class", "axis-label")
         .attr("x", width / 2)
-        .attr("y", height + margin.bottom - 5)
+        .attr("y", height + margin.bottom - 10)
         .style("text-anchor", "middle")
-        .text("Last Trans. Fee");
+        .text("Transfer Fee");
     
     // Y axis label
     svg2.append("text")
@@ -243,7 +295,7 @@ d3.csv("raw_wages.csv").then(function(data) {
         .attr("x", -height / 2)
         .attr("y", -margin.left + 15)
         .style("text-anchor", "middle")
-        .text("AVERAGE of Salary");
+        .text("Salary in Euros");
     
     // Add title to Chart 2
     svg2.append("text")
@@ -253,5 +305,5 @@ d3.csv("raw_wages.csv").then(function(data) {
         .attr("text-anchor", "middle")
         .style("font-size", "16px")
         .style("font-weight", "bold")
-        .text("Average Salary by Transfer Fee");
+        .text("Salary vs Transfer Fee");
 });
